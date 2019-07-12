@@ -1,0 +1,180 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: PHP Application CodePipeline
+
+Parameters:
+
+  ProjectName:
+    Type: String
+    Description: Name of the project for this pipeline
+
+  Environment:
+    Type: String
+    Description: Environment type e.g Dev, Staging, Prod.
+    Default: Dev
+    AllowedValues:
+      - Dev
+      - Uat
+      - Staging
+      - Prod
+
+  GitHubUserName:
+    Type: String
+    Description: Github username for the repository
+
+  GitHubRepository:
+    Type: String
+    Description: Github repository for the project
+
+  GitHubBranch:
+    Type: String
+    Description: GitHub branch
+    Default: development
+
+  GitHubOAuthToken:
+    Type: String
+    Description: Github OAth token
+    NoEcho: true
+
+  EC2TagKey:
+    Type: String
+    Description: EC2 tag key for the server to deploy
+
+  EC2TagValue:
+    Type: String
+    Description: EC2 tag value for the server to deploy
+
+Resources:
+
+  WebHook:
+    Type: AWS::CodePipeline::Webhook
+    Properties:
+      Authentication: GITHUB_HMAC
+      AuthenticationConfiguration:
+        SecretToken: !Ref GitHubOAuthToken
+      Filters:
+        - JsonPath: "$.ref"
+          MatchEquals: "refs/heads/{Branch}"
+      Name: !Sub ${ProjectName}-Webhook
+      TargetAction: !Sub ${ProjectName}-Github
+      TargetPipeline: !Ref CodePipeline
+      TargetPipelineVersion: 1
+
+  CodePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStore: 
+        Location: !Ref S3ArtifactsBucket
+        Type: S3
+      Name: !Ref ProjectName
+      RoleArn: !GetAtt CodePipelineServiceRole.Arn
+      Stages:
+        - Name: Github
+          Actions:
+            - Name: !Ref ProjectName
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Version: 1
+                Provider: GitHub
+              OutputArtifacts:
+                - Name: !Sub ${ProjectName}-Github
+              Configuration:
+                Owner: !Ref GitHubUserName
+                Repo: !Ref GitHubRepository
+                Branch: !Ref GitHubBranch
+                OAuthToken: !Ref GitHubOAuthToken
+        - Name: Build
+          Actions:
+            - Name: !Ref ProjectName
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: 1
+                Provider: CodeBuild
+              InputArtifacts:
+                - Name: !Sub ${ProjectName}-Github
+              OutputArtifacts:
+                - Name: !Sub ${ProjectName}-Build
+              Configuration:
+                ProjectName: !Ref CodeBuild
+        - Name: Deploy
+          Actions:
+            - Name: !Ref ProjectName
+              InputArtifacts:
+                - Name: !Sub ${ProjectName}-Build
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: 1
+                Provider: CodeDeploy
+              Configuration:
+                ApplicationName: !Ref CodeDeploy
+                DeploymentGroupName: !Ref DeploymentGroup
+  S3ArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: "Private"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  CodeBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Artifacts:
+        Type: CODEPIPELINE
+      Description: !Sub Code build for ${ProjectName}
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Type: LINUX_CONTAINER
+        Image: aws/codebuild/standard:2.0
+        EnvironmentVariables:
+          - Name: ENVIRONMENT
+            Value: !Ref Environment
+
+      ServiceRole: !GetAtt CodePipelineServiceRole.Arn
+      Source:
+        Type: CODEPIPELINE
+
+  CodeDeploy:
+    Type: AWS::CodeDeploy::Application
+    Properties:
+      ComputePlatform: Server
+
+  DeploymentGroup:
+    Type: AWS::CodeDeploy::DeploymentGroup
+    Properties:
+      ApplicationName: !Ref CodeDeploy
+      ServiceRoleArn: !GetAtt CodePipelineServiceRole.Arn
+      Ec2TagFilters:
+        - Type: KEY_AND_VALUE
+          Key: !Ref EC2TagKey
+          Value: !Ref EC2TagValue
+
+  CodePipelineServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service: 
+                - codepipeline.amazonaws.com
+                - codebuild.amazonaws.com
+                - codedeploy.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: codePipeline-policies
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: 
+                  - logs:*
+                  - codebuild:*
+                  - codedeploy:*
+                  - s3:*
+                  - ec2:*
+                Resource: "*"
