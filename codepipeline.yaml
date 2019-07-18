@@ -9,13 +9,11 @@ Parameters:
 
   Environment:
     Type: String
-    Description: Environment type e.g Dev, Staging, Prod.
-    Default: Dev
+    Description: Environment type e.g development, or production.
+    Default: development
     AllowedValues:
-      - Dev
-      - Uat
-      - Staging
-      - Prod
+      - development
+      - production
 
   GitHubUserName:
     Type: String
@@ -128,10 +126,12 @@ Resources:
       Environment:
         ComputeType: BUILD_GENERAL1_SMALL
         Type: LINUX_CONTAINER
-        Image: aws/codebuild/standard:2.0
+        Image: noodlesegg/php56
         EnvironmentVariables:
           - Name: ENVIRONMENT
             Value: !Ref Environment
+          - Name: GITHUB_TOKEN
+            Value: !Ref GitHubOAuthToken
 
       ServiceRole: !GetAtt CodePipelineServiceRole.Arn
       Source:
