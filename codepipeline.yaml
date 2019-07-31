@@ -15,6 +15,14 @@ Parameters:
       - development
       - production
 
+  ApplicationConfigurationsS3Bucket:
+    Type: String
+    Description: S3 bucket where the Application config is saved
+
+  ServerConfigurationsS3Bucket:
+    Type: String
+    Description: S3 bucket where the Server config is saved
+
   GitHubUserName:
     Type: String
     Description: Github username for the repository
@@ -126,12 +134,16 @@ Resources:
       Environment:
         ComputeType: BUILD_GENERAL1_SMALL
         Type: LINUX_CONTAINER
-        Image: noodlesegg/php56
+        Image: noodlesegg/php56:latest
         EnvironmentVariables:
           - Name: ENVIRONMENT
             Value: !Ref Environment
           - Name: GITHUB_TOKEN
             Value: !Ref GitHubOAuthToken
+          - Name: APP_CONFIG_BUCKET
+            Value: !Ref ApplicationConfigurationsS3Bucket
+          - Name: SERVER_CONFIG_BUCKET
+            Value: !Ref ServerConfigurationsS3Bucket
 
       ServiceRole: !GetAtt CodePipelineServiceRole.Arn
       Source:

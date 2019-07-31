@@ -15,6 +15,14 @@
         "production"
       ]
     },
+    "ApplicationConfigurationsS3Bucket": {
+      "Type": "String",
+      "Description": "S3 bucket where the Application config is saved"
+    },
+    "ServerConfigurationsS3Bucket": {
+      "Type": "String",
+      "Description": "S3 bucket where the Server config is saved"
+    },
     "GitHubUserName": {
       "Type": "String",
       "Description": "Github username for the repository"
@@ -48,7 +56,7 @@
       "Properties": {
         "Authentication": "GITHUB_HMAC",
         "AuthenticationConfiguration": {
-          "SecretToken": null
+          "SecretToken": "GitHubOAuthToken"
         },
         "Filters": [
           {
@@ -56,9 +64,9 @@
             "MatchEquals": "refs/heads/{Branch}"
           }
         ],
-        "Name": null,
-        "TargetAction": null,
-        "TargetPipeline": null,
+        "Name": "${ProjectName}-Webhook",
+        "TargetAction": "${ProjectName}-Github",
+        "TargetPipeline": "CodePipeline",
         "TargetPipelineVersion": 1
       }
     },
@@ -66,17 +74,17 @@
       "Type": "AWS::CodePipeline::Pipeline",
       "Properties": {
         "ArtifactStore": {
-          "Location": null,
+          "Location": "S3ArtifactsBucket",
           "Type": "S3"
         },
-        "Name": null,
-        "RoleArn": null,
+        "Name": "ProjectName",
+        "RoleArn": "CodePipelineServiceRole.Arn",
         "Stages": [
           {
             "Name": "Github",
             "Actions": [
               {
-                "Name": null,
+                "Name": "ProjectName",
                 "ActionTypeId": {
                   "Category": "Source",
                   "Owner": "ThirdParty",
@@ -85,14 +93,14 @@
                 },
                 "OutputArtifacts": [
                   {
-                    "Name": null
+                    "Name": "${ProjectName}-Github"
                   }
                 ],
                 "Configuration": {
-                  "Owner": null,
-                  "Repo": null,
-                  "Branch": null,
-                  "OAuthToken": null
+                  "Owner": "GitHubUserName",
+                  "Repo": "GitHubRepository",
+                  "Branch": "GitHubBranch",
+                  "OAuthToken": "GitHubOAuthToken"
                 }
               }
             ]
@@ -101,7 +109,7 @@
             "Name": "Build",
             "Actions": [
               {
-                "Name": null,
+                "Name": "ProjectName",
                 "ActionTypeId": {
                   "Category": "Build",
                   "Owner": "AWS",
@@ -110,16 +118,16 @@
                 },
                 "InputArtifacts": [
                   {
-                    "Name": null
+                    "Name": "${ProjectName}-Github"
                   }
                 ],
                 "OutputArtifacts": [
                   {
-                    "Name": null
+                    "Name": "${ProjectName}-Build"
                   }
                 ],
                 "Configuration": {
-                  "ProjectName": null
+                  "ProjectName": "CodeBuild"
                 }
               }
             ]
@@ -128,10 +136,10 @@
             "Name": "Deploy",
             "Actions": [
               {
-                "Name": null,
+                "Name": "ProjectName",
                 "InputArtifacts": [
                   {
-                    "Name": null
+                    "Name": "${ProjectName}-Build"
                   }
                 ],
                 "ActionTypeId": {
@@ -141,8 +149,8 @@
                   "Provider": "CodeDeploy"
                 },
                 "Configuration": {
-                  "ApplicationName": null,
-                  "DeploymentGroupName": null
+                  "ApplicationName": "CodeDeploy",
+                  "DeploymentGroupName": "DeploymentGroup"
                 }
               }
             ]
@@ -171,23 +179,31 @@
         "Artifacts": {
           "Type": "CODEPIPELINE"
         },
-        "Description": null,
+        "Description": "Code build for ${ProjectName}",
         "Environment": {
           "ComputeType": "BUILD_GENERAL1_SMALL",
           "Type": "LINUX_CONTAINER",
-          "Image": "noodlesegg/php56",
+          "Image": "noodlesegg/php56:latest",
           "EnvironmentVariables": [
             {
               "Name": "ENVIRONMENT",
-              "Value": null
+              "Value": "Environment"
             },
             {
               "Name": "GITHUB_TOKEN",
-              "Value": null
+              "Value": "GitHubOAuthToken"
+            },
+            {
+              "Name": "APP_CONFIG_BUCKET",
+              "Value": "ApplicationConfigurationsS3Bucket"
+            },
+            {
+              "Name": "SERVER_CONFIG_BUCKET",
+              "Value": "ServerConfigurationsS3Bucket"
             }
           ]
         },
-        "ServiceRole": null,
+        "ServiceRole": "CodePipelineServiceRole.Arn",
         "Source": {
           "Type": "CODEPIPELINE"
         }
@@ -202,13 +218,13 @@
     "DeploymentGroup": {
       "Type": "AWS::CodeDeploy::DeploymentGroup",
       "Properties": {
-        "ApplicationName": null,
-        "ServiceRoleArn": null,
+        "ApplicationName": "CodeDeploy",
+        "ServiceRoleArn": "CodePipelineServiceRole.Arn",
         "Ec2TagFilters": [
           {
             "Type": "KEY_AND_VALUE",
-            "Key": null,
-            "Value": null
+            "Key": "EC2TagKey",
+            "Value": "EC2TagValue"
           }
         ]
       }
