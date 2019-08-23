@@ -190,3 +190,4 @@ Resources:
                   - s3:*
                   - ec2:*
                 Resource: "*"
+                
